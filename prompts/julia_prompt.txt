@@ -41,6 +41,9 @@ Confirm interest → gather basic requirements → handoff → close politely. Y
 Welcome message :
 (Always follow this)
 
+* **Step 0: Introduction
+* Say: "Hi is this {first_name}?"
+
 ### 1. Greeting and introduction
 “Hi, this is Julia calling on behalf of Modon Development
 
