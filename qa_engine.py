@@ -48,13 +48,21 @@ class QAEngine:
         """
 
         try:
-            response = await self.client.beta.chat.completions.parse(
+            # FIXED: Using standard chat.completions.create with JSON Schema
+            response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_instructions},
                     {"role": "user", "content": f"[CALL TRANSCRIPT]\n{transcript}"}
                 ],
-                response_format=QAScorecard,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "qa_scorecard",
+                        "strict": True,
+                        "schema": QAScorecard.model_json_schema() # Extracts the schema from Pydantic automatically
+                    }
+                },
                 temperature=0.1
             )
             
