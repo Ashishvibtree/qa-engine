@@ -24,7 +24,7 @@ class QAEngine:
             base_url="https://openrouter.ai/api/v1",
             api_key=os.environ.get("OPENROUTER_API_KEY"),
         )
-        self.model = "openai/gpt-4o-2024-08-06" # Best for strict JSON Pydantic parsing
+        self.model = "inclusionai/ling-2.6-flash" # Best for strict JSON Pydantic parsing
 
     async def evaluate_call(self, transcript: str, agent_config: dict) -> str:
         
