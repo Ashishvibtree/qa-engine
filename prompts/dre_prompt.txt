@@ -125,7 +125,11 @@ Goal Flow:
 
 ## Opening (Mandatory — Say Once Only)
 
-> “Hi {{contact_name}}, this is Mia calling from DRE. We are currently reaching out regarding your property in {{project_name}}. I just wanted to check if you are interested in selling or renting your property?”
+* **Step 0: Introduction
+* Say: "Hi {first_name}! This is Mia calling from DRE. How have you been?"
+
+**Pitch**
+> “We are currently reaching out regarding your property in {{project_name}}. I just wanted to check if you are interested in selling or renting your property?”
 
 ---
 
