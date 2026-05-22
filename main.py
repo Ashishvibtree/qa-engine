@@ -16,76 +16,85 @@ app = FastAPI()
 retell = Retell(api_key=os.environ["RETELL_API_KEY"])
 qa_engine = QAEngine()
 
-# Create a folder to store our reports
 REPORTS_DIR = "reports"
 os.makedirs(REPORTS_DIR, exist_ok=True)
 
 async def process_qa_task(call_id: str, transcript_text: str, agent_config: dict, agent_name: str):
-    """Runs the LLM and saves the report with a timestamp."""
-    print(f"🔍 Starting QA evaluation for call {call_id}...")
+    print(f"🔍 Starting LLM QA evaluation for call {call_id}...", flush=True)
     
     scorecard_json = await qa_engine.evaluate_call(transcript_text, agent_config)
     
     if scorecard_json:
-        # Parse the JSON so we can inject the date and agent name
-        data = json.loads(scorecard_json)
-        data["call_id"] = call_id
-        data["agent_name"] = agent_name
-        data["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            data = json.loads(scorecard_json)
+            data["call_id"] = call_id
+            data["agent_name"] = agent_name
+            data["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Save to the reports folder
-        filename = f"{REPORTS_DIR}/{call_id}.json"
-        with open(filename, "w") as f:
-            json.dump(data, f, indent=4)
-        print(f"✅ QA Complete! Saved to {filename}")
+            filename = f"{REPORTS_DIR}/{call_id}.json"
+            with open(filename, "w") as f:
+                json.dump(data, f, indent=4)
+            print(f"✅ QA Complete! Saved to {filename}", flush=True)
+        except Exception as e:
+            print(f"❌ Failed to parse LLM JSON output: {e}", flush=True)
+            print(f"Raw Output: {scorecard_json}", flush=True)
+    else:
+        print(f"❌ LLM failed to return a scorecard for {call_id}", flush=True)
 
 
 @app.post("/qa-webhook")
 async def handle_qa_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Retell sends the call data here when a call ends."""
     try:
         post_data = await request.json()
         event_type = post_data.get("event")
         
+        # This will instantly print every event Retell sends!
+        print(f"📥 Received Webhook Event: {event_type}", flush=True)
+        
         if event_type == "call_analyzed":
             call_data = post_data.get("data", {})
             call_id = call_data.get("call_id")
-            agent_name = call_data.get("agent_name", "Unknown Agent")
+            
+            # Print exactly what data Retell sent so we can debug
+            print(f"📊 Call Data Received: {json.dumps(call_data)[:200]}...", flush=True)
+
+            agent_name = call_data.get("agent_name")
+            agent_id = call_data.get("agent_id")
+            
+            # If agent_name isn't in the webhook, we will know immediately!
+            if not agent_name:
+                print(f"⚠️ Warning: Retell did not send an agent_name! Only agent_id: {agent_id}", flush=True)
+                agent_name = "Unknown Agent"
 
             agent_config = get_agent_config(agent_name)
+            
             if not agent_config:
+                print(f"⏭️ Skipped QA: No matching config found for agent '{agent_name}'.", flush=True)
                 return JSONResponse(status_code=200, content={"message": "Skipped - Unknown Agent"})
 
             transcript_obj = call_data.get("transcript_object", [])
             transcript_text = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in transcript_obj])
 
-            # Run in background
             background_tasks.add_task(process_qa_task, call_id, transcript_text, agent_config, agent_name)
 
         return JSONResponse(status_code=200, content={"received": True})
     except Exception as e:
+        print(f"❌ Webhook Crash: {e}", flush=True)
         return JSONResponse(status_code=500, content={"message": str(e)})
 
 
-# ======================================================================
-# DASHBOARD ROUTES (For the Dev Team to view past scorecards)
-# ======================================================================
-
 @app.get("/api/reports")
 async def get_all_reports():
-    """Returns a list of all saved scorecards."""
     reports = []
     for filename in os.listdir(REPORTS_DIR):
         if filename.endswith(".json"):
             with open(os.path.join(REPORTS_DIR, filename), "r") as f:
                 reports.append(json.load(f))
-    # Sort newest first
     reports.sort(key=lambda x: x.get("date", ""), reverse=True)
     return reports
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def serve_dashboard():
-    """Serves the HTML UI."""
     html_content = """
     <!DOCTYPE html>
     <html>
@@ -115,8 +124,6 @@ async def serve_dashboard():
 
         <script>
             let allReports = [];
-
-            // 1. Fetch all reports from the server
             fetch('/api/reports')
                 .then(res => res.json())
                 .then(data => {
@@ -124,7 +131,6 @@ async def serve_dashboard():
                     renderSidebar();
                 });
 
-            // 2. Draw the list on the left
             function renderSidebar() {
                 const listDiv = document.getElementById('call-list');
                 listDiv.innerHTML = allReports.map((r, index) => {
@@ -139,7 +145,6 @@ async def serve_dashboard():
                 }).join('');
             }
 
-            // 3. Draw the full scorecard on the right when clicked
             function viewReport(index) {
                 const data = allReports[index];
                 const sectionsHtml = data.sections.map(sec => `
