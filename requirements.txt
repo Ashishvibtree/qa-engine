@@ -1,0 +1,7 @@
+fastapi==0.100.1
+uvicorn==0.21.1
+openai==1.23.6
+pydantic==2.6.0
+python-dotenv==1.0.1
+retell-sdk==4.6.0
+httpx==0.26.0
