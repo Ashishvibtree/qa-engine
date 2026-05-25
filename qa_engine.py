@@ -37,7 +37,7 @@ class QAEngine:
             base_url="https://openrouter.ai/api/v1",
             api_key=os.environ.get("OPENROUTER_API_KEY"),
         )
-        self.model = "inclusionai/ling-2.6-flash"
+        self.model = "stepfun/step-3.5-flash"
 
     async def evaluate_call(self, transcript: str, agent_config: dict) -> str:
         # 🔥 BLENDED SYSTEM PROMPT: Your structure + formatting rules
