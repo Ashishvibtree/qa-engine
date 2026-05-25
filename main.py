@@ -118,12 +118,13 @@ async def serve_dashboard():
             .score-badge { display: inline-block; padding: 5px 10px; border-radius: 20px; font-weight: bold; color: white; float: right;}
             .bg-good { background: #10b981; } .bg-ok { background: #f59e0b; } .bg-bad { background: #ef4444; }
             .section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid #ccc;}
-            .pass { border-left-color: #10b981; } .fail { border-left-color: #ef4444; }
+            .pass { border-left-color: #10b981; } .fail { border-left-color: #ef4444; .partial { border-left-color: #f59e0b; }
         </style>
     </head>
     <body>
         <div id="sidebar">
             <h2>Past Calls</h2>
+            <button onclick="clearHistory()" style="width:100%; margin-bottom:15px; padding:8px; cursor:pointer; border:1px solid #ddd; background:#fff; border-radius:4px;">🗑️ Clear Local History</button>
             <div id="call-list">Loading...</div>
         </div>
         <div id="content">
@@ -133,15 +134,63 @@ async def serve_dashboard():
 
         <script>
             let allReports = [];
-            fetch('/api/reports')
-                .then(res => res.json())
-                .then(data => {
-                    allReports = data;
-                    renderSidebar();
-                });
 
+            // 1. Load existing reports from localStorage when the page opens
+            function loadLocalHistory() {
+                const saved = localStorage.getItem("qa_reports_history");
+                if (saved) {
+                    allReports = JSON.parse(saved);
+                }
+            }
+
+            // 2. Fetch fresh reports from the server and merge them
+            function fetchAndMergeReports() {
+                fetch('/api/reports')
+                    .then(res => res.json())
+                    .then(serverData => {
+                        // Merge server data with local data, avoiding duplicates based on call_id
+                        let mergedMap = new Map();
+                        
+                        // Add local reports first
+                        allReports.forEach(report => mergedMap.set(report.call_id, report));
+                        
+                        // Overwrite/Add server reports
+                        serverData.forEach(report => mergedMap.set(report.call_id, report));
+
+                        // Convert Map back to array and sort by date descending
+                        allReports = Array.from(mergedMap.values());
+                        allReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                        // Save the newly merged list back to localStorage
+                        localStorage.setItem("qa_reports_history", JSON.stringify(allReports));
+
+                        renderSidebar();
+                    })
+                    .catch(err => {
+                        console.error("Could not fetch server reports, falling back to local history.", err);
+                        renderSidebar();
+                    });
+            }
+
+            // 3. Clear button functionality
+            function clearHistory() {
+                if (confirm("Are you sure you want to clear your local QA history?")) {
+                    localStorage.removeItem("qa_reports_history");
+                    allReports = [];
+                    renderSidebar();
+                    document.getElementById('scorecard-view').innerHTML = "";
+                }
+            }
+
+            // Draw the list on the left
             function renderSidebar() {
                 const listDiv = document.getElementById('call-list');
+                
+                if (allReports.length === 0) {
+                    listDiv.innerHTML = "<p style='color:#666;'>No QA reports generated yet.</p>";
+                    return;
+                }
+
                 listDiv.innerHTML = allReports.map((r, index) => {
                     let color = r.overall_compliance_score > 80 ? 'bg-good' : (r.overall_compliance_score > 60 ? 'bg-ok' : 'bg-bad');
                     return `
@@ -154,6 +203,7 @@ async def serve_dashboard():
                 }).join('');
             }
 
+            // Draw the full scorecard on the right
             function viewReport(index) {
                 const data = allReports[index];
                 const sectionsHtml = data.sections.map(sec => `
@@ -175,6 +225,13 @@ async def serve_dashboard():
                     ${sectionsHtml}
                 `;
             }
+
+            // Initialize
+            loadLocalHistory();
+            fetchAndMergeReports();
+            
+            // Auto-refresh the server fetch every 30 seconds to look for new calls
+            setInterval(fetchAndMergeReports, 30000); 
         </script>
     </body>
     </html>
