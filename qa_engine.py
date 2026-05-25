@@ -1,4 +1,5 @@
 import os
+import json
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from typing import List, Literal
@@ -9,7 +10,6 @@ class CapturedField(BaseModel):
     extracted_value: str = Field(description="The value captured, or 'Not Captured'")
 
 class QASection(BaseModel):
-    # FIXED: Using Literal prevents the LLM from inventing new categories
     category: Literal[
         "Flow Compliance", 
         "Conversation Quality", 
@@ -26,7 +26,6 @@ class QASection(BaseModel):
 class QAScorecard(BaseModel):
     overall_compliance_score: int = Field(ge=0, le=100)
     lead_classification: Literal["Interested", "Not Interested", "Callback", "Unqualified"]
-    # FIXED: Replaced open dict with a List of models to satisfy strict=True
     captured_fields: List[CapturedField] = Field(description="List of captured data points")
     sections: List[QASection]
 
@@ -37,10 +36,15 @@ class QAEngine:
             base_url="https://openrouter.ai/api/v1",
             api_key=os.environ.get("OPENROUTER_API_KEY"),
         )
+        # Using StepFun as requested, but this will now work with almost any model
         self.model = "stepfun/step-3.5-flash"
 
     async def evaluate_call(self, transcript: str, agent_config: dict) -> str:
-        # 🔥 BLENDED SYSTEM PROMPT: Your structure + formatting rules
+        
+        # 1. Dynamically extract our strict schema into a readable JSON string
+        schema_string = json.dumps(QAScorecard.model_json_schema(), indent=2)
+
+        # 2. Inject it directly into the System Prompt
         system_instructions = f"""
 You are an elite, evidence-based Quality Assurance Evaluator for AI agents. Your task is to rigorously analyze a call transcript against the agent's system prompt and success criteria, then output a strict JSON scorecard.
 
@@ -93,6 +97,12 @@ Analyze the transcript across these exact 7 categories. For each, assign a statu
 ### STRICT OUTPUT CONSTRAINTS
 - transcript_moments MUST contain exact, verbatim quotes from the transcript. NEVER paraphrase or invent quotes. If no direct quote applies, use an empty list [].
 - reasoning must be concise, analytical, and directly tied to the evidence.
+
+### CRITICAL JSON INSTRUCTIONS
+You MUST output ONLY valid JSON. Do NOT wrap the JSON in markdown code blocks (e.g., ```json).
+Your JSON output MUST exactly match the following JSON Schema structure:
+
+{schema_string}
 """
 
         try:
@@ -102,15 +112,11 @@ Analyze the transcript across these exact 7 categories. For each, assign a statu
                     {"role": "system", "content": system_instructions},
                     {"role": "user", "content": f"<transcript>\n{transcript}\n</transcript>"}
                 ],
+                # Using standard JSON mode for universal model compatibility
                 response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "qa_scorecard",
-                        "strict": True,
-                        "schema": QAScorecard.model_json_schema()
-                    }
+                    "type": "json_object"
                 },
-                temperature=0.0 # Dropped to 0.0 for maximum consistency
+                temperature=0.0
             )
             
             return response.choices[0].message.content
