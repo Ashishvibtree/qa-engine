@@ -118,7 +118,7 @@ async def serve_dashboard():
             .score-badge { display: inline-block; padding: 5px 10px; border-radius: 20px; font-weight: bold; color: white; float: right;}
             .bg-good { background: #10b981; } .bg-ok { background: #f59e0b; } .bg-bad { background: #ef4444; }
             .section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid #ccc;}
-            .pass { border-left-color: #10b981; } .fail { border-left-color: #ef4444; .partial { border-left-color: #f59e0b; }
+            .pass { border-left-color: #10b981; } .fail { border-left-color: #ef4444; } .partial { border-left-color: #f59e0b; }
         </style>
     </head>
     <body>
