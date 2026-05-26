@@ -44,12 +44,25 @@ AGENT_KNOWLEDGE_BASE = {
     }
 }
 
-def get_agent_config(retell_agent_name: str):
-    """Fuzzy matching to find the right config based on the Retell Agent Name"""
-    name_lower = retell_agent_name.lower()
-    if "salma" in name_lower: return AGENT_KNOWLEDGE_BASE["salma"]
-    if "julia" in name_lower: return AGENT_KNOWLEDGE_BASE["julia"]
-    if "dre" in name_lower or "mia" in name_lower: return AGENT_KNOWLEDGE_BASE["dre"]
-    if "beacon" in name_lower: return AGENT_KNOWLEDGE_BASE["beacon"]
+def get_agent_config(retell_agent_identifier: str):
+    """Fuzzy matching to find the right config based on the Retell Agent Name OR Agent ID"""
+    if not retell_agent_identifier:
+        return None
+        
+    identifier_lower = retell_agent_identifier.lower()
     
-    return None # Fallback if agent is unknown
+    # Explicitly map the exact Agent ID for Salma from your Retell Campaign
+    if "salma" in identifier_lower or "8e9b2bc6-4667-49c2-8ef8-bd11d733e3f1" in identifier_lower: 
+        return AGENT_KNOWLEDGE_BASE["salma"]
+        
+    if "julia" in identifier_lower: 
+        return AGENT_KNOWLEDGE_BASE["julia"]
+        
+    if "dre" in identifier_lower or "mia" in identifier_lower: 
+        return AGENT_KNOWLEDGE_BASE["dre"]
+        
+    if "beacon" in identifier_lower: 
+        return AGENT_KNOWLEDGE_BASE["beacon"]
+    
+    # Safe fallback: If it's truly unknown, skip it rather than guessing wrongly.
+    return None
