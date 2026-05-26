@@ -46,45 +46,61 @@ async def process_qa_task(call_id: str, transcript_text: str, agent_config: dict
 async def handle_qa_webhook(request: Request, background_tasks: BackgroundTasks):
     try:
         post_data = await request.json()
-        event_type = post_data.get("event")
+        event_type = post_data.get("event") or post_data.get("event_type")
         
         print(f"📥 Received Webhook Event: {event_type}", flush=True)
         
         if event_type == "call_analyzed":
-            # 1. Print the raw payload so we can see exactly what Retell is sending
-            print(f"📦 RAW PAYLOAD: {json.dumps(post_data)[:500]}...", flush=True)
             
-            # 2. Fix: Check BOTH 'call' and 'data' keys for the payload
-            call_data = post_data.get("call") or post_data.get("data") or post_data
+            # 1. FIX THE NESTED JSON TRAP
+            # Safely drill down to the actual call object regardless of how Retell packages it
+            call_obj = {}
+            if "data" in post_data and "call" in post_data["data"]:
+                call_obj = post_data["data"]["call"]
+            elif "call" in post_data:
+                call_obj = post_data["call"]
+            else:
+                call_obj = post_data
             
-            call_id = call_data.get("call_id")
-            agent_name = call_data.get("agent_name")
-            agent_id = call_data.get("agent_id")
+            call_id = call_obj.get("call_id", "Unknown")
+            status = call_obj.get("status", "Unknown")
             
-            if not agent_name:
-                print(f"⚠️ Warning: No agent_name found! Available keys are: {list(call_data.keys())}", flush=True)
-                # If we only have the ID, we will print it to help us debug
-                agent_name = "Unknown Agent"
+            # 2. FILTER OUT NO-ANSWER & DEAD CALLS
+            # Instantly drop calls where the customer didn't pick up
+            if status in ["no-answer", "failed", "canceled", "busy", "machine"] or call_obj.get("duration", 0) == 0:
+                print(f"⏭️ Skipped QA: Call {call_id} was unanswered (Status: {status}).", flush=True)
+                return JSONResponse(status_code=200, content={"message": "Skipped unconnected call"})
 
-            agent_config = get_agent_config(agent_name)
+            # 3. GET AGENT IDENTIFIER
+            agent_name = call_obj.get("agent_name")
+            agent_id = call_obj.get("agent_id")
+            
+            # Use name if available, otherwise use ID
+            identifier = agent_name if agent_name else agent_id
+
+            if not identifier:
+                print(f"⚠️ Warning: No agent_name or agent_id found for connected call {call_id}.", flush=True)
+                return JSONResponse(status_code=200, content={"message": "Skipped - No identifier"})
+
+            agent_config = get_agent_config(identifier)
             
             if not agent_config:
-                print(f"⏭️ Skipped QA: No matching config found for agent '{agent_name}'.", flush=True)
+                print(f"⏭️ Skipped QA: No matching config found for agent/ID '{identifier}'.", flush=True)
                 return JSONResponse(status_code=200, content={"message": "Skipped"})
 
-            # Extract transcript
-            transcript_obj = call_data.get("transcript_object", [])
-            
-            # Sometimes Retell nests the transcript inside 'call_analysis'
-            if not transcript_obj and "call_analysis" in call_data:
-                transcript_obj = call_data["call_analysis"].get("transcript_object", [])
+            # 4. EXTRACT TRANSCRIPT
+            transcript_obj = call_obj.get("transcript_object", [])
+            if not transcript_obj and "call_analysis" in call_obj:
+                transcript_obj = call_obj["call_analysis"].get("transcript_object", [])
+
+            if not transcript_obj:
+                print(f"⚠️ Warning: Transcript is empty for connected call {call_id}! Skipping.", flush=True)
+                return JSONResponse(status_code=200, content={"message": "Skipped empty transcript"})
 
             transcript_text = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in transcript_obj])
 
-            if not transcript_text.strip():
-                print(f"⚠️ Warning: Transcript is empty for {call_id}!", flush=True)
-
-            background_tasks.add_task(process_qa_task, call_id, transcript_text, agent_config, agent_name)
+            # Trigger Background QA Task
+            background_tasks.add_task(process_qa_task, call_id, transcript_text, agent_config, identifier)
 
         return JSONResponse(status_code=200, content={"received": True})
     except Exception as e:
