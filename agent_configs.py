@@ -52,7 +52,7 @@ def get_agent_config(retell_agent_identifier: str):
     identifier_lower = retell_agent_identifier.lower()
     
     # Explicitly map the exact Agent ID for Salma from your Retell Campaign
-    if "salma" in identifier_lower or "8e9b2bc6-4667-49c2-8ef8-bd11d733e3f1" in identifier_lower: 
+    if "Salma-SLM" in identifier_lower or "8e9b2bc6-4667-49c2-8ef8-bd11d733e3f1" in identifier_lower: 
         return AGENT_KNOWLEDGE_BASE["salma"]
         
     if "julia" in identifier_lower: 
