@@ -53,7 +53,6 @@ async def handle_qa_webhook(request: Request, background_tasks: BackgroundTasks)
         if event_type == "call_analyzed":
             
             # 1. FIX THE NESTED JSON TRAP
-            # Safely drill down to the actual call object regardless of how Retell packages it
             call_obj = {}
             if "data" in post_data and "call" in post_data["data"]:
                 call_obj = post_data["data"]["call"]
@@ -63,19 +62,19 @@ async def handle_qa_webhook(request: Request, background_tasks: BackgroundTasks)
                 call_obj = post_data
             
             call_id = call_obj.get("call_id", "Unknown")
-            status = call_obj.get("status", "Unknown")
+            
+            # 🔥 FIX: Check both Retell formats for status and duration
+            status = call_obj.get("status") or call_obj.get("call_status") or "Unknown"
+            duration = call_obj.get("duration") or call_obj.get("duration_ms") or 0
             
             # 2. FILTER OUT NO-ANSWER & DEAD CALLS
-            # Instantly drop calls where the customer didn't pick up
-            if status in ["no-answer", "failed", "canceled", "busy", "machine"] or call_obj.get("duration", 0) == 0:
-                print(f"⏭️ Skipped QA: Call {call_id} was unanswered (Status: {status}).", flush=True)
+            if status in ["no-answer", "failed", "canceled", "busy", "machine"] or duration == 0:
+                print(f"⏭️ Skipped QA: Call {call_id} was unanswered (Status: {status}, Duration: {duration}).", flush=True)
                 return JSONResponse(status_code=200, content={"message": "Skipped unconnected call"})
 
             # 3. GET AGENT IDENTIFIER
             agent_name = call_obj.get("agent_name")
             agent_id = call_obj.get("agent_id")
-            
-            # Use name if available, otherwise use ID
             identifier = agent_name if agent_name else agent_id
 
             if not identifier:
